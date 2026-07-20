@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartStock WMS — Control Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root{
+    --void:#090d16;
+    --panel:#111927;
+    --panel-2:#161f30;
+    --panel-3:#1b2438;
+    --line:#232c42;
+    --line-soft:#1a2235;
+    --ink:#edf1f9;
+    --ink-dim:#8b96ab;
+    --ink-faint:#5c6780;
+    --amber:#ffb020;
+    --amber-soft:rgba(255,176,32,.14);
+    --cyan:#2fe6d9;
+    --cyan-soft:rgba(47,230,217,.14);
+    --violet:#9c8cff;
+    --violet-soft:rgba(156,140,255,.14);
+    --rose:#ff6b81;
+    --rose-soft:rgba(255,107,129,.14);
+    --ok:#34d399;
+    --ok-soft:rgba(52,211,153,.14);
+    --radius:13px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(900px 520px at 14% -6%, rgba(47,230,217,.09), transparent 60%),
+      radial-gradient(820px 560px at 100% 4%, rgba(156,140,255,.08), transparent 58%),
+      radial-gradient(760px 620px at 40% 115%, rgba(255,176,32,.06), transparent 60%),
+      var(--void);
+    background-attachment:fixed;
+    color:var(--ink);
+    font-family:'IBM Plex Sans Thai','IBM Plex Sans',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  body::before{
+    content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+    background-image:repeating-linear-gradient(180deg, rgba(255,255,255,.014) 0px, rgba(255,255,255,.014) 1px, transparent 1px, transparent 3px);
+  }
+  .display{font-family:'Sora','IBM Plex Sans Thai',sans-serif;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  ::selection{background:rgba(47,230,217,.28);}
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px;}
+  ::-webkit-scrollbar-thumb:hover{background:var(--ink-faint);}
+
+  /* ================= SHELL ================= */
+  .shell{position:relative;z-index:1;display:grid;grid-template-columns:252px 1fr;min-height:100vh;}
+  @media (max-width:860px){.shell{grid-template-columns:1fr;}}
+
+  /* ---- Sidebar: warehouse rack column ---- */
+  .sidebar{
+    position:sticky;top:0;height:100vh;
+    background:linear-gradient(185deg, #0b111d, #0c1420 60%);
+    border-right:1px solid var(--line-soft);
+    padding:26px 18px 18px 30px;
+    display:flex;flex-direction:column;gap:24px;
+  }
+  @media (max-width:860px){.sidebar{position:relative;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;padding:14px 16px;}}
+  .rack-ruler{
+    position:absolute;left:0;top:0;bottom:0;width:14px;
+    background:linear-gradient(180deg, rgba(47,230,217,.06), rgba(156,140,255,.05));
+    border-right:1px solid var(--line-soft);
+  }
+  @media (max-width:860px){.rack-ruler{display:none;}}
+
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .glyph{
+    width:34px;height:34px;border-radius:9px;flex:none;position:relative;
+    background:linear-gradient(140deg, var(--cyan), var(--violet));
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 0 1px rgba(255,255,255,.08), 0 10px 20px -8px rgba(47,230,217,.5);
+  }
+  .brand .glyph svg{width:18px;height:18px;stroke:#06121a;}
+  .brand .txt b{display:block;font-family:'Sora';font-weight:800;font-size:15.5px;letter-spacing:.2px;color:#fff;}
+  .brand .txt small{display:block;font-family:'IBM Plex Mono';font-size:9.5px;letter-spacing:1.2px;color:var(--cyan);text-transform:uppercase;margin-top:2px;}
+
+  nav{display:flex;flex-direction:column;gap:3px;}
+  @media (max-width:860px){nav{flex-direction:row;flex-wrap:wrap;flex:1;}}
+  .nav-btn{
+    display:flex;align-items:center;gap:11px;
+    background:transparent;border:none;color:var(--ink-dim);
+    padding:10px 12px;border-radius:9px;cursor:pointer;position:relative;
+    font-family:inherit;font-size:13.5px;font-weight:500;text-align:left;
+    transition:background .15s, color .15s;
+  }
+  .nav-btn svg{width:16px;height:16px;flex:none;opacity:.85;}
+  .nav-btn .tick{font-family:'IBM Plex Mono';font-size:9px;color:var(--ink-faint);margin-left:auto;}
+  .nav-btn:hover{background:rgba(255,255,255,.045);color:var(--ink);}
+  .nav-btn.active{background:linear-gradient(90deg, rgba(47,230,217,.14), rgba(156,140,255,.06));color:#fff;}
+  .nav-btn.active::before{content:"";position:absolute;left:-12px;top:8px;bottom:8px;width:3px;border-radius:2px;background:linear-gradient(180deg, var(--cyan), var(--violet));}
+
+  .side-foot{margin-top:auto;font-size:10.5px;color:var(--ink-faint);line-height:1.7;font-family:'IBM Plex Mono';}
+  @media (max-width:860px){.side-foot{display:none;}}
+  .side-foot .live{display:flex;align-items:center;gap:6px;color:var(--ok);margin-bottom:8px;}
+  .live-dot{width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(52,211,153,.6);animation:pulse 2s infinite;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.5);}70%{box-shadow:0 0 0 7px rgba(52,211,153,0);}100%{box-shadow:0 0 0 0 rgba(52,211,153,0);}}
+
+  main{padding:28px 32px 60px;max-width:1220px;position:relative;}
+  @media (max-width:600px){main{padding:18px 16px 100px;}}
+
+  .page-head{margin-bottom:24px;position:relative;padding-bottom:16px;}
+  .page-head .eyebrow{font-family:'IBM Plex Mono';font-size:10.5px;letter-spacing:2px;color:var(--cyan);text-transform:uppercase;margin-bottom:6px;}
+  .page-head-row{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;}
+  .page-head h1{font-family:'Sora';font-size:24px;margin:0 0 4px;color:#fff;font-weight:800;}
+  .page-head p{margin:0;color:var(--ink-dim);font-size:13px;}
+  .clock{font-family:'IBM Plex Mono';font-size:12px;color:var(--ink-dim);background:var(--panel);border:1px solid var(--line);padding:8px 13px;border-radius:9px;}
+  .scanbar{position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line);overflow:hidden;}
+  .scanbar::after{
+    content:"";position:absolute;top:0;bottom:0;width:120px;left:-120px;
+    background:linear-gradient(90deg, transparent, var(--cyan), var(--violet), transparent);
+    animation:sweep 3.2s ease-in-out infinite;
+  }
+  @keyframes sweep{0%{left:-120px;}55%{left:100%;}100%{left:100%;}}
+
+  section.view{display:none;}
+  section.view.active{display:block;animation:fadein .22s ease;}
+  @keyframes fadein{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}
+
+  /* ---------- KPI tiles ---------- */
+  .kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:13px;margin-bottom:24px;}
+  @media (max-width:1000px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
+  @media (max-width:480px){.kpi-grid{grid-template-columns:1fr;}}
+  .kpi{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px 16px 14px;position:relative;overflow:hidden;
+  }
+  .kpi::before{content:"";position:absolute;left:0;top:0;right:0;height:2.5px;background:var(--accent, var(--cyan));}
+  .kpi .val{font-family:'IBM Plex Mono';font-size:25px;font-weight:700;color:#fff;}
+  .kpi .lbl{font-size:11px;color:var(--ink-dim);margin-top:4px;letter-spacing:.2px;}
+  .kpi.warn{--accent:var(--amber);}
+  .kpi.warn .val{color:var(--amber);}
+  .kpi.good{--accent:var(--ok);}
+  .kpi.good .val{color:var(--ok);}
+  .kpi.violet{--accent:var(--violet);}
+
+  .grid-2{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;}
+  @media (max-width:960px){.grid-2{grid-template-columns:1fr;}}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 18px 16px;}
+  .card h3{font-family:'Sora';font-size:13.5px;margin:0 0 14px;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:space-between;}
+  .card h3 .tag{font-size:9.5px;font-weight:600;color:var(--ink-faint);font-family:'IBM Plex Mono';letter-spacing:1px;text-transform:uppercase;}
+
+  .low-list{display:flex;flex-direction:column;gap:8px;max-height:290px;overflow:auto;}
+  .low-row{display:flex;justify-content:space-between;align-items:center;padding:9px 11px;border-radius:9px;background:var(--amber-soft);border:1px solid rgba(255,176,32,.28);}
+  .low-row .sku{font-family:'IBM Plex Mono';font-size:10.5px;color:var(--ink-dim);}
+  .low-row .name{font-size:12.5px;font-weight:500;color:var(--ink);}
+  .low-row .qty{font-family:'IBM Plex Mono';font-size:12.5px;color:var(--amber);font-weight:700;}
+  .empty-note{color:var(--ink-faint);font-size:12.5px;padding:22px 4px;text-align:center;}
+
+  /* ---------- Forms ---------- */
+  .scan-wrap{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media (max-width:860px){.scan-wrap{grid-template-columns:1fr;}}
+  .field{display:flex;flex-direction:column;gap:6px;margin-bottom:13px;}
+  .field label{font-size:11.5px;color:var(--ink-dim);font-weight:500;}
+  .field input,.field select{
+    padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:13.5px;
+    font-family:'IBM Plex Mono',monospace;background:var(--panel-2);color:var(--ink);
+  }
+  .field select{font-family:'IBM Plex Sans Thai';}
+  .field select option{background:#101827;}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 3px rgba(47,230,217,.12);}
+  .field input::placeholder{color:var(--ink-faint);}
+  .sku-preview{
+    border:1px dashed var(--line);border-radius:9px;padding:14px;background:var(--panel-2);
+    min-height:62px;display:flex;flex-direction:column;justify-content:center;gap:4px;
+  }
+  .sku-preview .nf{color:var(--ink-faint);font-size:12px;}
+  .sku-preview .name{font-weight:600;font-size:13.5px;color:#fff;}
+  .sku-preview .stock{font-family:'IBM Plex Mono';font-size:11px;color:var(--ink-dim);}
+  .btn{
+    border:none;border-radius:10px;padding:11px 18px;font-size:13.5px;font-weight:700;
+    cursor:pointer;font-family:'IBM Plex Sans Thai';transition:filter .15s, transform .05s;width:100%;
+  }
+  .btn:active{transform:translateY(1px);}
+  .btn-cyan{background:linear-gradient(120deg, var(--cyan), #17b9ae);color:#04211d;}
+  .btn-amber{background:linear-gradient(120deg, var(--amber), #d9860f);color:#2b1600;}
+  .btn-violet{background:linear-gradient(120deg, var(--violet), #6f5de0);color:#160f38;}
+  .btn:hover{filter:brightness(1.08);}
+  .toast{margin-top:12px;padding:10px 12px;border-radius:9px;font-size:12.5px;display:none;line-height:1.5;}
+  .toast.ok{display:block;background:var(--ok-soft);color:var(--ok);border:1px solid rgba(52,211,153,.32);}
+  .toast.err{display:block;background:var(--rose-soft);color:var(--rose);border:1px solid rgba(255,107,129,.32);}
+
+  /* ---------- Table ---------- */
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  thead th{
+    text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;
+    color:var(--ink-faint);border-bottom:1px solid var(--line);padding:9px 10px;font-weight:700;font-family:'IBM Plex Mono';
+  }
+  tbody td{padding:10px 10px;border-bottom:1px solid var(--line-soft);color:var(--ink-dim);}
+  tbody tr:hover{background:rgba(255,255,255,.02);}
+  .pill{font-size:9.5px;padding:3px 9px;border-radius:20px;font-weight:700;font-family:'IBM Plex Mono';letter-spacing:.3px;}
+  .pill.in{background:var(--cyan-soft);color:var(--cyan);}
+  .pill.out{background:var(--amber-soft);color:var(--amber);}
+  .pill.adj{background:var(--violet-soft);color:var(--violet);}
+  .pill.low{background:var(--rose-soft);color:var(--rose);}
+  .pill.ok{background:var(--ok-soft);color:var(--ok);}
+  .table-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;flex-wrap:wrap;}
+  .search{padding:9px 12px;border:1px solid var(--line);border-radius:9px;font-size:12.5px;font-family:'IBM Plex Mono';min-width:220px;background:var(--panel-2);color:var(--ink);}
+  .search::placeholder{color:var(--ink-faint);}
+  .table-scroll{overflow:auto;max-height:520px;border:1px solid var(--line);border-radius:11px;}
+  .table-scroll table{margin:0;}
+  .table-scroll thead th{position:sticky;top:0;background:#0e1522;z-index:1;}
+  .mini-btn{
+    background:transparent;border:1px solid var(--line);color:var(--ink-dim);
+    border-radius:7px;padding:6px 11px;font-size:11.5px;cursor:pointer;font-family:inherit;
+    transition:.15s;
+  }
+  .mini-btn:hover{border-color:var(--cyan);color:var(--cyan);}
+
+  footer.note{margin-top:28px;font-size:11px;color:var(--ink-faint);line-height:1.7;border-top:1px solid var(--line-soft);padding-top:14px;font-family:'IBM Plex Mono';}
+
+  /* ================= CHATBOT ================= */
+  #chat-fab{
+    position:fixed;right:24px;bottom:24px;z-index:60;
+    width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;
+    background:linear-gradient(140deg, var(--cyan), var(--violet));
+    color:#06121a;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 0 1px rgba(255,255,255,.1), 0 16px 30px -10px rgba(47,230,217,.55);
+    transition:transform .18s ease, box-shadow .18s ease;
+  }
+  #chat-fab::before{
+    content:"";position:absolute;inset:-6px;border-radius:50%;border:1.5px solid rgba(47,230,217,.4);
+    animation:ring 2.4s ease-out infinite;
+  }
+  @keyframes ring{0%{transform:scale(.86);opacity:.9;}100%{transform:scale(1.28);opacity:0;}}
+  #chat-fab svg{width:23px;height:23px;position:relative;z-index:1;}
+  #chat-fab:hover{transform:translateY(-2px) scale(1.04);}
+  #chat-fab.hide{display:none;}
+
+  #chat-panel{
+    position:fixed;right:24px;bottom:92px;z-index:60;
+    width:352px;max-width:calc(100vw - 32px);height:480px;max-height:calc(100vh - 130px);
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    box-shadow:0 40px 70px -20px rgba(0,0,0,.55);
+    display:none;flex-direction:column;overflow:hidden;
+  }
+  #chat-panel.open{display:flex;animation:chatpop .18s ease;}
+  @keyframes chatpop{from{opacity:0;transform:translateY(8px) scale(.98);}to{opacity:1;transform:none;}}
+
+  .chat-head{
+    display:flex;align-items:center;gap:10px;padding:14px;
+    background:linear-gradient(120deg, #0c1420, #101a2c);border-bottom:1px solid var(--line);flex:none;
+  }
+  .chat-head-avatar{
+    width:32px;height:32px;border-radius:9px;flex:none;
+    background:linear-gradient(140deg, var(--cyan), var(--violet));display:flex;align-items:center;justify-content:center;
+  }
+  .chat-head-avatar svg{width:16px;height:16px;stroke:#06121a;}
+  .chat-head-txt{display:flex;flex-direction:column;gap:1px;flex:1;overflow:hidden;}
+  .chat-head-txt b{font-family:'Sora';font-size:13px;color:#fff;}
+  .chat-head-txt small{font-size:10px;color:var(--ok);font-family:'IBM Plex Mono';}
+  #chat-close{background:transparent;border:none;color:var(--ink-dim);cursor:pointer;padding:4px;display:flex;}
+  #chat-close svg{width:16px;height:16px;}
+  #chat-close:hover{color:#fff;}
+
+  .chat-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--void);}
+  .msg{max-width:86%;font-size:12.5px;line-height:1.6;padding:9px 12px;border-radius:12px;white-space:pre-line;}
+  .msg.bot{background:var(--panel-2);border:1px solid var(--line);color:var(--ink);align-self:flex-start;border-bottom-left-radius:3px;}
+  .msg.user{background:linear-gradient(120deg, var(--cyan), #1eb0a4);color:#04211d;align-self:flex-end;border-bottom-right-radius:3px;font-weight:500;}
+
+  .chat-quick{display:flex;gap:6px;flex-wrap:wrap;padding:0 12px 10px;flex:none;}
+  .chat-quick button{
+    border:1px solid var(--line);background:var(--panel-2);color:var(--cyan);
+    font-size:10.5px;padding:6px 10px;border-radius:20px;cursor:pointer;font-family:inherit;
+    transition:background .15s;
+  }
+  .chat-quick button:hover{background:var(--cyan-soft);}
+
+  .chat-input-row{display:flex;gap:8px;padding:11px 12px;border-top:1px solid var(--line);flex:none;background:var(--panel);}
+  .chat-input-row input{
+    flex:1;border:1px solid var(--line);border-radius:20px;padding:9px 14px;font-size:12.5px;
+    font-family:'IBM Plex Sans Thai';background:var(--panel-2);color:var(--ink);
+  }
+  .chat-input-row input:focus{outline:none;border-color:var(--cyan);}
+  .chat-input-row button{
+    width:36px;height:36px;border-radius:50%;border:none;flex:none;cursor:pointer;
+    background:var(--cyan);color:#06121a;display:flex;align-items:center;justify-content:center;
+  }
+  .chat-input-row button svg{width:15px;height:15px;}
+  .chat-input-row button:hover{filter:brightness(1.08);}
+
+  @media (max-width:480px){
+    #chat-panel{right:12px;left:12px;width:auto;bottom:82px;}
+    #chat-fab{right:16px;bottom:16px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="rack-ruler"></div>
+    <div class="brand">
+      <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8M12 13v8"/></svg></div>
+      <div class="txt"><b>SmartStock WMS</b><small>Control Room</small></div>
+    </div>
+    <nav id="nav">
+      <button class="nav-btn active" data-view="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        แดชบอร์ด <span class="tick">01</span>
+      </button>
+      <button class="nav-btn" data-view="receive">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        รับสินค้าเข้า <span class="tick">02</span>
+      </button>
+      <button class="nav-btn" data-view="ship">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        จ่ายสินค้าออก <span class="tick">03</span>
+      </button>
+      <button class="nav-btn" data-view="items">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8M12 13v8"/></svg>
+        รายการสินค้า <span class="tick">04</span>
+      </button>
+      <button class="nav-btn" data-view="maintain">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+        ดูแลคลังสินค้า <span class="tick">05</span>
+      </button>
+      <button class="nav-btn" data-view="history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        ประวัติรายการ <span class="tick">06</span>
+      </button>
+    </nav>
+    <div class="side-foot">
+      <div class="live"><span class="live-dot"></span> SYSTEM ONLINE</div>
+      PROTOTYPE v1.0<br>ข้อมูลบันทึกในเบราว์เซอร์ (localStorage)
+    </div>
+  </aside>
+
+  <main>
+    <div class="page-head">
+      <div class="page-head-row">
+        <div>
+          <div class="eyebrow">// Operations Overview</div>
+          <h1 id="page-title">แดชบอร์ดคลังสินค้า</h1>
+          <p id="page-sub">ภาพรวมสต็อกและกิจกรรมแบบเรียลไทม์</p>
+        </div>
+        <div class="clock mono" id="clock">--:--:--</div>
+      </div>
+      <div class="scanbar"></div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <section class="view active" id="view-dashboard">
+      <div class="kpi-grid">
+        <div class="kpi"><div class="val" id="kpi-total">0</div><div class="lbl">SKU ทั้งหมด</div></div>
+        <div class="kpi warn"><div class="val" id="kpi-low">0</div><div class="lbl">สินค้าใกล้หมด</div></div>
+        <div class="kpi good"><div class="val" id="kpi-in">0</div><div class="lbl">รับเข้าวันนี้ (ชิ้น)</div></div>
+        <div class="kpi"><div class="val" id="kpi-out">0</div><div class="lbl">จ่ายออกวันนี้ (ชิ้น)</div></div>
+        <div class="kpi good"><div class="val" id="kpi-acc">99.8%</div><div class="lbl">ความแม่นยำสต็อก</div></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>แนวโน้มรับ–จ่ายสินค้า 7 วันล่าสุด <span class="tag">IN / OUT</span></h3>
+          <canvas id="trendChart" height="150"></canvas>
+        </div>
+        <div class="card">
+          <h3>สินค้าที่ต้องสั่งเพิ่ม <span class="tag">ต่ำกว่าจุดสั่งซื้อ</span></h3>
+          <div class="low-list" id="low-list"></div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top:14px;">
+        <div class="card">
+          <h3>สินค้าคงเหลือสูงสุด 10 อันดับ <span class="tag">Top Stock</span></h3>
+          <canvas id="stockChart" height="190"></canvas>
+        </div>
+        <div class="card">
+          <h3>สัดส่วนสินค้าตามหมวดหมู่ <span class="tag">By Category</span></h3>
+          <canvas id="categoryChart" height="190"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- RECEIVE -->
+    <section class="view" id="view-receive">
+      <div class="scan-wrap">
+        <div class="card">
+          <h3>สแกน / กรอกรหัสสินค้า (SKU)</h3>
+          <div class="field">
+            <label>รหัส SKU</label>
+            <input type="text" id="in-sku" placeholder="เช่น SS-1001" autocomplete="off">
+          </div>
+          <div class="sku-preview" id="in-preview"><span class="nf">พิมพ์หรือสแกนรหัส SKU เพื่อดึงข้อมูลสินค้า</span></div>
+          <div class="field" style="margin-top:14px;">
+            <label>จำนวนที่รับเข้า</label>
+            <input type="number" id="in-qty" min="1" placeholder="0">
+          </div>
+          <div class="field">
+            <label>ผู้ส่งมอบ</label>
+            <select id="in-supplier"></select>
+          </div>
+          <div class="field">
+            <label>เลขที่อ้างอิง (ถ้ามี)</label>
+            <input type="text" id="in-ref" placeholder="PO-XXXX">
+          </div>
+          <button class="btn btn-cyan" id="btn-in">↓ บันทึกรับสินค้าเข้า</button>
+          <div class="toast" id="in-toast"></div>
+        </div>
+        <div class="card">
+          <h3>รายการที่รับเข้าล่าสุด <span class="tag">Receiving Log</span></h3>
+          <div class="table-scroll" style="max-height:420px">
+            <table>
+              <thead><tr><th>เวลา</th><th>SKU</th><th>สินค้า</th><th>จำนวน</th></tr></thead>
+              <tbody id="in-log"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SHIP -->
+    <section class="view" id="view-ship">
+      <div class="scan-wrap">
+        <div class="card">
+          <h3>สแกน / กรอกรหัสสินค้า (SKU)</h3>
+          <div class="field">
+            <label>รหัส SKU</label>
+            <input type="text" id="out-sku" placeholder="เช่น SS-1001" autocomplete="off">
+          </div>
+          <div class="sku-preview" id="out-preview"><span class="nf">พิมพ์หรือสแกนรหัส SKU เพื่อดึงข้อมูลสินค้า</span></div>
+          <div class="field" style="margin-top:14px;">
+            <label>จำนวนที่จ่ายออก</label>
+            <input type="number" id="out-qty" min="1" placeholder="0">
+          </div>
+          <div class="field">
+            <label>เลขที่อ้างอิง (คำสั่งซื้อ/ใบส่งของ)</label>
+            <input type="text" id="out-ref" placeholder="SO-XXXX">
+          </div>
+          <button class="btn btn-amber" id="btn-out">↑ บันทึกจ่ายสินค้าออก</button>
+          <div class="toast" id="out-toast"></div>
+        </div>
+        <div class="card">
+          <h3>รายการที่จ่ายออกล่าสุด <span class="tag">Shipping Log</span></h3>
+          <div class="table-scroll" style="max-height:420px">
+            <table>
+              <thead><tr><th>เวลา</th><th>SKU</th><th>สินค้า</th><th>จำนวน</th></tr></thead>
+              <tbody id="out-log"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ITEMS -->
+    <section class="view" id="view-items">
+      <div class="card">
+        <div class="table-toolbar">
+          <input class="search" id="item-search" placeholder="ค้นหาชื่อสินค้าหรือ SKU...">
+          <span class="tag mono" id="item-count" style="color:var(--ink-faint)"></span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>SKU</th><th>ชื่อสินค้า</th><th>หมวดหมู่</th><th>ตำแหน่งจัดเก็บ</th><th>คงเหลือ</th><th>จุดสั่งซื้อ</th><th>สถานะ</th></tr></thead>
+            <tbody id="items-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- MAINTAIN -->
+    <section class="view" id="view-maintain">
+      <div class="scan-wrap">
+        <div class="card">
+          <h3>ปรับปรุงยอดสินค้า <span class="tag">Stock Adjustment</span></h3>
+          <div class="field">
+            <label>รหัส SKU</label>
+            <input type="text" id="adj-sku" placeholder="เช่น SS-1001" autocomplete="off">
+          </div>
+          <div class="sku-preview" id="adj-preview"><span class="nf">พิมพ์รหัส SKU เพื่อดึงข้อมูลสินค้า</span></div>
+          <div class="field" style="margin-top:14px;">
+            <label>ยอดคงเหลือใหม่ (นับจริง)</label>
+            <input type="number" id="adj-qty" min="0" placeholder="0">
+          </div>
+          <div class="field">
+            <label>เหตุผลการปรับปรุง</label>
+            <select id="adj-reason">
+              <option value="นับสต็อกจริงประจำงวด">นับสต็อกจริงประจำงวด (Cycle Count)</option>
+              <option value="สินค้าชำรุด/เสียหาย">สินค้าชำรุด/เสียหาย</option>
+              <option value="สินค้าสูญหาย">สินค้าสูญหาย</option>
+              <option value="แก้ไขข้อมูลผิดพลาด">แก้ไขข้อมูลที่บันทึกผิดพลาด</option>
+              <option value="อื่นๆ">อื่นๆ</option>
+            </select>
+          </div>
+          <button class="btn btn-violet" id="btn-adjust">⚙ บันทึกปรับปรุงยอด</button>
+          <div class="toast" id="adj-toast"></div>
+        </div>
+
+        <div class="card">
+          <h3>ตั้งค่าจุดสั่งซื้อ &amp; ตำแหน่งจัดเก็บ <span class="tag">Item Settings</span></h3>
+          <div class="table-scroll" style="max-height:420px">
+            <table>
+              <thead><tr><th>SKU</th><th>สินค้า</th><th>ตำแหน่ง</th><th>จุดสั่งซื้อ</th><th></th></tr></thead>
+              <tbody id="settings-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px;">
+        <h3>ประวัติการปรับปรุงยอด <span class="tag">Adjustment Log</span></h3>
+        <div class="table-scroll" style="max-height:280px">
+          <table>
+            <thead><tr><th>เวลา</th><th>SKU</th><th>สินค้า</th><th>เปลี่ยนแปลง</th><th>ยอดใหม่</th><th>เหตุผล</th></tr></thead>
+            <tbody id="adj-log"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- HISTORY -->
+    <section class="view" id="view-history">
+      <div class="card">
+        <div class="table-toolbar">
+          <span style="font-size:12.5px;color:var(--ink-dim)">ประวัติการทำรายการทั้งหมด เรียงล่าสุดก่อน</span>
+          <span class="tag mono" id="hist-count" style="color:var(--ink-faint)"></span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>เวลา</th><th>ประเภท</th><th>SKU</th><th>สินค้า</th><th>จำนวน</th><th>อ้างอิง</th></tr></thead>
+            <tbody id="hist-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <footer class="note">
+      SMARTSTOCK LOGISTICS CO., LTD. — WMS PROTOTYPE · ข้อมูลจำลอง บันทึกในเบราว์เซอร์เท่านั้น · ต่อยอดเป็น Backend Node.js + Database ได้ตามแผนพัฒนาแบบเฟส
+    </footer>
+  </main>
+</div>
+
+<!-- ================= CHATBOT WIDGET ================= -->
+<button id="chat-fab" aria-label="เปิดผู้ช่วยแชทบอท">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+</button>
+
+<div id="chat-panel">
+  <div class="chat-head">
+    <div class="chat-head-avatar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+    </div>
+    <div class="chat-head-txt">
+      <b>ผู้ช่วย SmartStock</b>
+      <small>● พร้อมช่วยเหลือ</small>
+    </div>
+    <button id="chat-close" aria-label="ปิดแชท">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="chat-body" id="chat-body"></div>
+  <div class="chat-quick" id="chat-quick"></div>
+  <form class="chat-input-row" id="chat-form">
+    <input type="text" id="chat-input" placeholder="พิมพ์คำถาม เช่น ช่วยอะไรได้บ้าง..." autocomplete="off">
+    <button type="submit" aria-label="ส่งข้อความ">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+    </button>
+  </form>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------------- Data layer (localStorage as mock DB) ---------------- */
+  const DB_KEY = "smartstock_wms_v2";
+
+  function seed(){
+    const suppliers = [
+      {id:1, name:"Bangkok Supply Co."},
+      {id:2, name:"Thai Central Distribution"},
+      {id:3, name:"Asia Pack Trading"}
+    ];
+    const items = [
+      {id:1, sku:"SS-1001", name:"กล่องกระดาษลูกฟูก เบอร์ 2", category:"บรรจุภัณฑ์", location:"A-01-03", qty:420, reorder:100},
+      {id:2, sku:"SS-1002", name:"เทปกาวโอพีพี 48มม.", category:"บรรจุภัณฑ์", location:"A-01-05", qty:65, reorder:80},
+      {id:3, sku:"SS-1003", name:"พาเลทไม้มาตรฐาน", category:"อุปกรณ์คลัง", location:"B-02-01", qty:38, reorder:20},
+      {id:4, sku:"SS-1004", name:"ฟิล์มยืดพันพาเลท", category:"บรรจุภัณฑ์", location:"A-02-02", qty:12, reorder:30},
+      {id:5, sku:"SS-1005", name:"บาร์โค้ดสแกนเนอร์มือถือ", category:"อุปกรณ์อิเล็กทรอนิกส์", location:"C-01-01", qty:9, reorder:5},
+      {id:6, sku:"SS-1006", name:"แท็ก RFID แบบติดกล่อง", category:"อุปกรณ์อิเล็กทรอนิกส์", location:"C-01-02", qty:1500, reorder:500},
+      {id:7, sku:"SS-1007", name:"ถุงกันกระแทกบับเบิ้ล", category:"บรรจุภัณฑ์", location:"A-03-01", qty:210, reorder:100},
+      {id:8, sku:"SS-1008", name:"กล่องพลาสติกอเนกประสงค์", category:"อุปกรณ์คลัง", location:"B-01-04", qty:74, reorder:40},
+      {id:9, sku:"SS-1009", name:"ป้ายฉลากสินค้าคงคลัง", category:"เครื่องเขียน", location:"C-02-03", qty:20, reorder:50},
+      {id:10, sku:"SS-1010", name:"สายรัดพลาสติกมัดสินค้า", category:"บรรจุภัณฑ์", location:"A-02-05", qty:340, reorder:150}
+    ];
+    const now = Date.now();
+    const day = 86400000;
+    const transactions = [];
+    let tid = 1;
+    for(let d=6; d>=0; d--){
+      const inQty = 40 + Math.round(Math.random()*80);
+      const outQty = 30 + Math.round(Math.random()*70);
+      const t = now - d*day - 3600000;
+      transactions.push({id:tid++, type:"IN", item_id: 1 + (d%items.length), qty:inQty, ref:"PO-"+(2000+d), ts:t, supplier_id:1});
+      transactions.push({id:tid++, type:"OUT", item_id: 1 + ((d+2)%items.length), qty:outQty, ref:"SO-"+(3000+d), ts:t+1800000});
+    }
+    return {suppliers, items, transactions, nextTxId:tid};
+  }
+
+  function loadDB(){
+    try{
+      const raw = localStorage.getItem(DB_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    const fresh = seed();
+    saveDB(fresh);
+    return fresh;
+  }
+  function saveDB(db){ localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+
+  let db = loadDB();
+
+  function findItemBySku(sku){
+    sku = (sku||"").trim().toUpperCase();
+    return db.items.find(i => i.sku.toUpperCase() === sku);
+  }
+  function isSameDay(ts){
+    const a = new Date(ts), b = new Date();
+    return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+  }
+  function sameCalendarDay(ts1, ts2){
+    const a = new Date(ts1), b = new Date(ts2);
+    return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+  }
+  function fmtTime(ts){
+    const d = new Date(ts);
+    return d.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit'}) + " " + d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+  }
+
+  /* ---------------- Navigation ---------------- */
+  const titles = {
+    dashboard:["แดชบอร์ดคลังสินค้า","ภาพรวมสต็อกและกิจกรรมแบบเรียลไทม์","// Operations Overview"],
+    receive:["รับสินค้าเข้าคลัง","สแกนหรือกรอก SKU เพื่อบันทึกยอดรับเข้า","// Inbound"],
+    ship:["จ่ายสินค้าออกจากคลัง","สแกนหรือกรอก SKU เพื่อบันทึกยอดจ่ายออก","// Outbound"],
+    items:["รายการสินค้าทั้งหมด","ตรวจสอบยอดคงเหลือและตำแหน่งจัดเก็บ","// Inventory"],
+    maintain:["ดูแลคลังสินค้า","ปรับปรุงยอดสต็อก ตั้งค่าจุดสั่งซื้อ และตำแหน่งจัดเก็บ","// Maintenance"],
+    history:["ประวัติการทำรายการ","รายการรับ-จ่าย-ปรับปรุงยอดสินค้าทั้งหมดในระบบ","// Audit Log"]
+  };
+  document.getElementById('nav').addEventListener('click', (e)=>{
+    const btn = e.target.closest('.nav-btn');
+    if(!btn) return;
+    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const view = btn.dataset.view;
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+view).classList.add('active');
+    document.getElementById('page-title').textContent = titles[view][0];
+    document.getElementById('page-sub').textContent = titles[view][1];
+    document.querySelector('.eyebrow').textContent = titles[view][2];
+    renderAll();
+  });
+
+  /* ---------------- Clock ---------------- */
+  function startClock(){
+    const tick = ()=> document.getElementById('clock').textContent = new Date().toLocaleTimeString('th-TH');
+    setInterval(tick, 1000); tick();
+  }
+
+  /* ---------------- Dashboard render ---------------- */
+  let chart = null, stockChart = null, categoryChart = null;
+
+  function renderDashboard(){
+    const total = db.items.length;
+    const lowItems = db.items.filter(i => i.qty <= i.reorder);
+    document.getElementById('kpi-total').textContent = total;
+    document.getElementById('kpi-low').textContent = lowItems.length;
+
+    const todayIn = db.transactions.filter(t=>t.type==="IN" && isSameDay(t.ts)).reduce((s,t)=>s+t.qty,0);
+    const todayOut = db.transactions.filter(t=>t.type==="OUT" && isSameDay(t.ts)).reduce((s,t)=>s+t.qty,0);
+    document.getElementById('kpi-in').textContent = todayIn.toLocaleString();
+    document.getElementById('kpi-out').textContent = todayOut.toLocaleString();
+
+    const lowList = document.getElementById('low-list');
+    if(lowItems.length === 0){
+      lowList.innerHTML = '<div class="empty-note">ยังไม่มีสินค้าที่ต่ำกว่าจุดสั่งซื้อ</div>';
+    } else {
+      lowList.innerHTML = lowItems.map(i=>`
+        <div class="low-row">
+          <div>
+            <div class="name">${i.name}</div>
+            <div class="sku">${i.sku}</div>
+          </div>
+          <div class="qty">${i.qty} / ${i.reorder}</div>
+        </div>`).join('');
+    }
+
+    const day = 86400000;
+    const now = Date.now();
+    const labels = [], inData = [], outData = [];
+    for(let d=6; d>=0; d--){
+      const dayStart = now - d*day;
+      labels.push(new Date(dayStart).toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit'}));
+      inData.push(db.transactions.filter(t=>t.type==="IN" && sameCalendarDay(t.ts, dayStart)).reduce((s,t)=>s+t.qty,0));
+      outData.push(db.transactions.filter(t=>t.type==="OUT" && sameCalendarDay(t.ts, dayStart)).reduce((s,t)=>s+t.qty,0));
+    }
+    const ctx = document.getElementById('trendChart');
+    if(chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type:'line',
+      data:{ labels, datasets:[
+        {label:'รับเข้า (IN)', data:inData, borderColor:'#2fe6d9', backgroundColor:'rgba(47,230,217,.12)', tension:.35, fill:true, pointRadius:3, pointBackgroundColor:'#2fe6d9'},
+        {label:'จ่ายออก (OUT)', data:outData, borderColor:'#ffb020', backgroundColor:'rgba(255,176,32,.1)', tension:.35, fill:true, pointRadius:3, pointBackgroundColor:'#ffb020'}
+      ]},
+      options:{
+        responsive:true,
+        plugins:{ legend:{position:'bottom', labels:{color:'#8b96ab', font:{family:"'IBM Plex Sans Thai'", size:11}}} },
+        scales:{
+          y:{ grid:{color:'rgba(255,255,255,.05)'}, ticks:{color:'#5c6780', font:{size:10}} },
+          x:{ grid:{display:false}, ticks:{color:'#5c6780', font:{size:10}} }
+        }
+      }
+    });
+
+    const top = [...db.items].sort((a,b)=>b.qty-a.qty).slice(0,10);
+    const ctx2 = document.getElementById('stockChart');
+    if(stockChart) stockChart.destroy();
+    stockChart = new Chart(ctx2, {
+      type:'bar',
+      data:{ labels: top.map(i=>i.sku), datasets:[{
+        label:'คงเหลือ (หน่วย)', data: top.map(i=>i.qty),
+        backgroundColor: top.map(i => i.qty <= i.reorder ? 'rgba(255,107,129,.7)' : 'rgba(47,230,217,.6)'),
+        borderRadius:5, maxBarThickness:24
+      }]},
+      options:{
+        indexAxis:'y', responsive:true,
+        plugins:{ legend:{display:false},
+          tooltip:{ callbacks:{ title:(items)=>{ const it = top[items[0].dataIndex]; return it.name + ' (' + it.sku + ')'; } } } },
+        scales:{
+          x:{ grid:{color:'rgba(255,255,255,.05)'}, ticks:{color:'#5c6780', font:{size:10}} },
+          y:{ grid:{display:false}, ticks:{color:'#8b96ab', font:{family:"'IBM Plex Mono'", size:10}} }
+        }
+      }
+    });
+
+    const byCat = {};
+    db.items.forEach(i=>{ byCat[i.category] = (byCat[i.category]||0) + i.qty; });
+    const catLabels = Object.keys(byCat);
+    const catData = Object.values(byCat);
+    const palette = ['#2fe6d9','#9c8cff','#ffb020','#ff6b81','#34d399','#5aa9ff'];
+    const ctx3 = document.getElementById('categoryChart');
+    if(categoryChart) categoryChart.destroy();
+    categoryChart = new Chart(ctx3, {
+      type:'doughnut',
+      data:{ labels:catLabels, datasets:[{ data:catData, backgroundColor: catLabels.map((_,i)=>palette[i % palette.length]), borderColor:'#111927', borderWidth:2 }] },
+      options:{ responsive:true, cutout:'62%',
+        plugins:{ legend:{position:'bottom', labels:{color:'#8b96ab', boxWidth:11, font:{family:"'IBM Plex Sans Thai'", size:11}}} } }
+    });
+  }
+
+  /* ---------------- Items table ---------------- */
+  function renderItems(filter){
+    filter = (filter||"").trim().toLowerCase();
+    const rows = db.items.filter(i => !filter || i.name.toLowerCase().includes(filter) || i.sku.toLowerCase().includes(filter));
+    document.getElementById('item-count').textContent = rows.length + " รายการ";
+    document.getElementById('items-table').innerHTML = rows.map(i=>{
+      const low = i.qty <= i.reorder;
+      return `<tr>
+        <td class="mono">${i.sku}</td>
+        <td>${i.name}</td>
+        <td>${i.category}</td>
+        <td class="mono">${i.location}</td>
+        <td class="mono">${i.qty.toLocaleString()}</td>
+        <td class="mono">${i.reorder.toLocaleString()}</td>
+        <td><span class="pill ${low?'low':'ok'}">${low?'ใกล้หมด':'ปกติ'}</span></td>
+      </tr>`;
+    }).join('');
+  }
+  document.getElementById('item-search').addEventListener('input', (e)=> renderItems(e.target.value));
+
+  /* ---------------- History table ---------------- */
+  function renderHistory(){
+    const rows = [...db.transactions].sort((a,b)=>b.ts-a.ts).slice(0,200);
+    document.getElementById('hist-count').textContent = db.transactions.length + " รายการ";
+    const typeLabel = {IN:'รับเข้า', OUT:'จ่ายออก', ADJUST:'ปรับปรุงยอด'};
+    const typeClass = {IN:'in', OUT:'out', ADJUST:'adj'};
+    document.getElementById('hist-table').innerHTML = rows.map(t=>{
+      const item = db.items.find(i=>i.id===t.item_id);
+      const qtyDisplay = t.type==='ADJUST' ? (t.qty>0?'+':'') + t.qty.toLocaleString() : t.qty.toLocaleString();
+      return `<tr>
+        <td class="mono">${fmtTime(t.ts)}</td>
+        <td><span class="pill ${typeClass[t.type]||'in'}">${typeLabel[t.type]||t.type}</span></td>
+        <td class="mono">${item?item.sku:'-'}</td>
+        <td>${item?item.name:'(ไม่พบสินค้า)'}</td>
+        <td class="mono">${qtyDisplay}</td>
+        <td class="mono">${t.ref||'-'}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  /* ---------------- Logs on receive/ship pages ---------------- */
+  function renderMiniLog(type, tbodyId){
+    const rows = db.transactions.filter(t=>t.type===type).sort((a,b)=>b.ts-a.ts).slice(0,12);
+    document.getElementById(tbodyId).innerHTML = rows.map(t=>{
+      const item = db.items.find(i=>i.id===t.item_id);
+      return `<tr>
+        <td class="mono">${fmtTime(t.ts)}</td>
+        <td class="mono">${item?item.sku:'-'}</td>
+        <td>${item?item.name:'(ไม่พบ)'}</td>
+        <td class="mono">${t.qty.toLocaleString()}</td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="4" class="empty-note">ยังไม่มีรายการ</td></tr>`;
+  }
+
+  /* ---------------- Suppliers dropdown ---------------- */
+  function renderSuppliers(){
+    document.getElementById('in-supplier').innerHTML = db.suppliers.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  }
+
+  /* ---------------- SKU preview logic ---------------- */
+  function wireSkuPreview(inputId, previewId){
+    const input = document.getElementById(inputId);
+    const preview = document.getElementById(previewId);
+    input.addEventListener('input', ()=>{
+      const item = findItemBySku(input.value);
+      if(!item){
+        preview.innerHTML = input.value.trim() ? '<span class="nf" style="color:var(--rose)">ไม่พบ SKU นี้ในระบบ</span>' : '<span class="nf">พิมพ์หรือสแกนรหัส SKU เพื่อดึงข้อมูลสินค้า</span>';
+        return;
+      }
+      preview.innerHTML = `
+        <div class="name">${item.name}</div>
+        <div class="stock">คงเหลือปัจจุบัน: ${item.qty.toLocaleString()} · ตำแหน่ง ${item.location} · จุดสั่งซื้อ ${item.reorder}</div>`;
+    });
+  }
+  wireSkuPreview('in-sku','in-preview');
+  wireSkuPreview('out-sku','out-preview');
+  wireSkuPreview('adj-sku','adj-preview');
+
+  /* ---------------- Receive action ---------------- */
+  document.getElementById('btn-in').addEventListener('click', ()=>{
+    const skuInput = document.getElementById('in-sku');
+    const qtyInput = document.getElementById('in-qty');
+    const supplierSel = document.getElementById('in-supplier');
+    const refInput = document.getElementById('in-ref');
+    const toast = document.getElementById('in-toast');
+
+    const item = findItemBySku(skuInput.value);
+    const qty = parseInt(qtyInput.value, 10);
+
+    if(!item){ showToast(toast, 'err', 'ไม่พบสินค้ารหัสนี้ในระบบ กรุณาตรวจสอบ SKU'); return; }
+    if(!qty || qty <= 0){ showToast(toast, 'err', 'กรุณาระบุจำนวนที่ต้องการรับเข้าให้ถูกต้อง'); return; }
+
+    item.qty += qty;
+    db.transactions.push({
+      id: db.nextTxId++, type:"IN", item_id:item.id, qty,
+      ref: refInput.value.trim() || ('PO-' + Date.now().toString().slice(-6)),
+      ts: Date.now(), supplier_id: parseInt(supplierSel.value,10)
+    });
+    saveDB(db);
+
+    showToast(toast, 'ok', `บันทึกรับ ${item.name} จำนวน ${qty.toLocaleString()} หน่วยสำเร็จ · คงเหลือ ${item.qty.toLocaleString()}`);
+    skuInput.value=''; qtyInput.value=''; refInput.value='';
+    document.getElementById('in-preview').innerHTML = '<span class="nf">พิมพ์หรือสแกนรหัส SKU เพื่อดึงข้อมูลสินค้า</span>';
+    renderAll();
+  });
+
+  /* ---------------- Ship action ---------------- */
+  document.getElementById('btn-out').addEventListener('click', ()=>{
+    const skuInput = document.getElementById('out-sku');
+    const qtyInput = document.getElementById('out-qty');
+    const refInput = document.getElementById('out-ref');
+    const toast = document.getElementById('out-toast');
+
+    const item = findItemBySku(skuInput.value);
+    const qty = parseInt(qtyInput.value, 10);
+
+    if(!item){ showToast(toast, 'err', 'ไม่พบสินค้ารหัสนี้ในระบบ กรุณาตรวจสอบ SKU'); return; }
+    if(!qty || qty <= 0){ showToast(toast, 'err', 'กรุณาระบุจำนวนที่ต้องการจ่ายออกให้ถูกต้อง'); return; }
+    if(qty > item.qty){ showToast(toast, 'err', `สต็อกไม่พอ! คงเหลือเพียง ${item.qty.toLocaleString()} หน่วย ไม่สามารถจ่าย ${qty.toLocaleString()} หน่วยได้`); return; }
+
+    item.qty -= qty;
+    db.transactions.push({
+      id: db.nextTxId++, type:"OUT", item_id:item.id, qty,
+      ref: refInput.value.trim() || ('SO-' + Date.now().toString().slice(-6)),
+      ts: Date.now()
+    });
+    saveDB(db);
+
+    let msg = `บันทึกจ่าย ${item.name} จำนวน ${qty.toLocaleString()} หน่วยสำเร็จ · คงเหลือ ${item.qty.toLocaleString()}`;
+    if(item.qty <= item.reorder) msg += ' — ⚠ สินค้าใกล้หมด กรุณาสั่งซื้อเพิ่ม';
+    showToast(toast, 'ok', msg);
+    skuInput.value=''; qtyInput.value=''; refInput.value='';
+    document.getElementById('out-preview').innerHTML = '<span class="nf">พิมพ์หรือสแกนรหัส SKU เพื่อดึงข้อมูลสินค้า</span>';
+    renderAll();
+  });
+
+  /* ---------------- Stock adjustment (Warehouse maintenance) ---------------- */
+  document.getElementById('btn-adjust').addEventListener('click', ()=>{
+    const skuInput = document.getElementById('adj-sku');
+    const qtyInput = document.getElementById('adj-qty');
+    const reasonSel = document.getElementById('adj-reason');
+    const toast = document.getElementById('adj-toast');
+
+    const item = findItemBySku(skuInput.value);
+    const newQty = parseInt(qtyInput.value, 10);
+
+    if(!item){ showToast(toast, 'err', 'ไม่พบสินค้ารหัสนี้ในระบบ กรุณาตรวจสอบ SKU'); return; }
+    if(qtyInput.value === '' || isNaN(newQty) || newQty < 0){ showToast(toast, 'err', 'กรุณาระบุยอดคงเหลือใหม่ให้ถูกต้อง'); return; }
+
+    const delta = newQty - item.qty;
+    if(delta === 0){ showToast(toast, 'err', 'ยอดใหม่เท่ากับยอดเดิม ไม่มีการเปลี่ยนแปลง'); return; }
+
+    item.qty = newQty;
+    db.transactions.push({ id: db.nextTxId++, type:"ADJUST", item_id:item.id, qty:delta, ref: reasonSel.value, ts: Date.now() });
+    saveDB(db);
+
+    const sign = delta > 0 ? '+' : '';
+    showToast(toast, 'ok', `ปรับปรุงยอด ${item.name} สำเร็จ (${sign}${delta.toLocaleString()}) · คงเหลือใหม่ ${item.qty.toLocaleString()}`);
+    skuInput.value=''; qtyInput.value='';
+    document.getElementById('adj-preview').innerHTML = '<span class="nf">พิมพ์รหัส SKU เพื่อดึงข้อมูลสินค้า</span>';
+    renderAll();
+  });
+
+  function renderSettingsTable(){
+    const tbody = document.getElementById('settings-table');
+    tbody.innerHTML = db.items.map(i=>`
+      <tr data-item-id="${i.id}">
+        <td class="mono">${i.sku}</td>
+        <td>${i.name}</td>
+        <td><input type="text" class="search set-location" value="${i.location}" style="width:88px;padding:6px 8px;font-size:11.5px;"></td>
+        <td><input type="number" class="search set-reorder" value="${i.reorder}" min="0" style="width:66px;padding:6px 8px;font-size:11.5px;"></td>
+        <td><button class="mini-btn set-save">บันทึก</button></td>
+      </tr>`).join('');
+
+    tbody.querySelectorAll('.set-save').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{
+        const row = e.target.closest('tr');
+        const id = parseInt(row.dataset.itemId, 10);
+        const item = db.items.find(i=>i.id===id);
+        if(!item) return;
+        const loc = row.querySelector('.set-location').value.trim();
+        const reorder = parseInt(row.querySelector('.set-reorder').value, 10);
+        if(loc) item.location = loc;
+        if(!isNaN(reorder) && reorder >= 0) item.reorder = reorder;
+        saveDB(db);
+        renderAll();
+      });
+    });
+  }
+
+  function renderAdjustLog(){
+    const tbody = document.getElementById('adj-log');
+    const rows = db.transactions.filter(t=>t.type==="ADJUST").sort((a,b)=>b.ts-a.ts).slice(0,50);
+    tbody.innerHTML = rows.map(t=>{
+      const item = db.items.find(i=>i.id===t.item_id);
+      const sign = t.qty > 0 ? '+' : '';
+      return `<tr>
+        <td class="mono">${fmtTime(t.ts)}</td>
+        <td class="mono">${item?item.sku:'-'}</td>
+        <td>${item?item.name:'(ไม่พบ)'}</td>
+        <td class="mono" style="color:${t.qty>0?'var(--ok)':'var(--rose)'}">${sign}${t.qty.toLocaleString()}</td>
+        <td class="mono">${item?item.qty.toLocaleString():'-'}</td>
+        <td>${t.ref||'-'}</td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="6" class="empty-note">ยังไม่มีประวัติการปรับปรุงยอด</td></tr>`;
+  }
+
+  function showToast(el, kind, msg){
+    el.className = 'toast ' + kind;
+    el.textContent = msg;
+    clearTimeout(el._t);
+    el._t = setTimeout(()=>{ el.className='toast'; }, 5000);
+  }
+
+  /* ---------------- Master render ---------------- */
+  function renderAll(){
+    renderDashboard();
+    renderItems(document.getElementById('item-search').value);
+    renderHistory();
+    renderMiniLog('IN','in-log');
+    renderMiniLog('OUT','out-log');
+    renderSuppliers();
+    renderSettingsTable();
+    renderAdjustLog();
+  }
+
+  /* ================= CHATBOT ================= */
+  const chatFab = document.getElementById('chat-fab');
+  const chatPanel = document.getElementById('chat-panel');
+  const chatClose = document.getElementById('chat-close');
+  const chatBody = document.getElementById('chat-body');
+  const chatForm = document.getElementById('chat-form');
+  const chatInput = document.getElementById('chat-input');
+  const chatQuick = document.getElementById('chat-quick');
+
+  const CAPABILITIES_MSG =
+`ตอนนี้ผมช่วยเรื่องต่อไปนี้ได้ครับ:
+
+↓ รับสินค้าเข้าคลัง — บันทึกยอดรับเข้าและอัปเดตสต็อกอัตโนมัติ
+↑ จ่ายสินค้าออก — บันทึกยอดจ่ายออก พร้อมตรวจสอบสต็อกไม่ให้ติดลบ
+▦ ตรวจสอบรายการสินค้า — ค้นหา SKU ดูยอดคงเหลือและตำแหน่งจัดเก็บ
+⚙ ดูแลคลังสินค้า — ปรับปรุงยอดสต็อกจากการนับจริง ตั้งค่าจุดสั่งซื้อและตำแหน่ง
+▤ แดชบอร์ด — ดูภาพรวม KPI แนวโน้มรับ-จ่าย และสินค้าใกล้หมด
+◷ ประวัติรายการ — ย้อนดูรายการรับ/จ่าย/ปรับปรุงยอดทั้งหมด
+
+พิมพ์ถามได้เลยครับ เช่น "สินค้าใกล้หมดมีอะไรบ้าง" หรือ "รับสินค้าเข้ายังไง"`;
+
+  const QUICK_QUESTIONS = ["ช่วยอะไรได้บ้าง","สินค้าใกล้หมดมีอะไรบ้าง","รับสินค้าเข้ายังไง","ปรับปรุงยอดสต็อกยังไง"];
+
+  function addMsg(text, who){
+    const div = document.createElement('div');
+    div.className = 'msg ' + who;
+    div.textContent = text;
+    chatBody.appendChild(div);
+    chatBody.scrollTop = chatBody.scrollHeight;
+  }
+
+  function renderQuickReplies(){
+    chatQuick.innerHTML = QUICK_QUESTIONS.map(q=>`<button type="button">${q}</button>`).join('');
+    chatQuick.querySelectorAll('button').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ addMsg(btn.textContent, 'user'); respondTo(btn.textContent); });
+    });
+  }
+
+  function respondTo(raw){
+    const q = raw.trim().toLowerCase();
+    let reply = '';
+    if(/ช่วย|ทำอะไรได้|ทำไรได้|capabilit|help|มีอะไรบ้าง$/.test(q) && !/สินค้า|สต็อก|stock/.test(q)){
+      reply = CAPABILITIES_MSG;
+    } else if(/ใกล้หมด|reorder|ต้องสั่ง/.test(q)){
+      const low = db.items.filter(i=>i.qty <= i.reorder);
+      reply = low.length === 0
+        ? 'ตอนนี้ยังไม่มีสินค้าที่ต่ำกว่าจุดสั่งซื้อครับ สต็อกทุกรายการอยู่ในระดับปกติ'
+        : `พบสินค้าใกล้หมด ${low.length} รายการครับ:\n` + low.map(i=>`• ${i.name} (${i.sku}) เหลือ ${i.qty} / จุดสั่งซื้อ ${i.reorder}`).join('\n');
+    } else if(/รับสินค้า|receiving/.test(q)){
+      reply = 'วิธีรับสินค้าเข้าคลัง: ไปที่เมนู "รับสินค้าเข้า" ทางซ้าย พิมพ์หรือสแกนรหัส SKU ระบบจะดึงข้อมูลสินค้ามาให้ยืนยัน จากนั้นกรอกจำนวนที่รับเข้า เลือกผู้ส่งมอบ แล้วกดปุ่ม "บันทึกรับสินค้าเข้า" ครับ';
+    } else if(/จ่ายสินค้า|shipping|จัดส่ง/.test(q)){
+      reply = 'วิธีจ่ายสินค้าออก: ไปที่เมนู "จ่ายสินค้าออก" พิมพ์รหัส SKU กรอกจำนวนที่ต้องการจ่าย ระบบจะตรวจสอบให้อัตโนมัติว่าสต็อกเพียงพอหรือไม่ก่อนบันทึกครับ';
+    } else if(/ปรับปรุงยอด|นับสต็อก|cycle count|ดูแลคลัง|จุดสั่งซื้อ|ตำแหน่งจัดเก็บ/.test(q)){
+      reply = 'การดูแลคลังสินค้าทำได้ที่เมนู "ดูแลคลังสินค้า" ครับ ใช้ปรับปรุงยอดสต็อกให้ตรงกับที่นับได้จริง (ระบุเหตุผล เช่น นับสต็อกจริง/สินค้าชำรุด/สูญหาย) และตั้งค่าจุดสั่งซื้อหรือตำแหน่งจัดเก็บของแต่ละ SKU ได้จากตารางในหน้าเดียวกันเลย';
+    } else if(/ค้นหา|หาสินค้า|sku ไหน|find item/.test(q)){
+      reply = 'ค้นหาสินค้าได้ที่เมนู "รายการสินค้า" ครับ มีช่องค้นหาด้วยชื่อหรือรหัส SKU และจะโชว์สถานะว่าใกล้หมดหรือปกติให้ด้วย';
+    } else if(/ประวัติ|history|log/.test(q)){
+      reply = 'ดูประวัติการทำรายการทั้งหมด (รับเข้า/จ่ายออก/ปรับปรุงยอด) ได้ที่เมนู "ประวัติรายการ" ครับ เรียงจากล่าสุดไปเก่าสุด';
+    } else if(/สวัสดี|หวัดดี|hello|hi\b/.test(q)){
+      reply = 'สวัสดีครับ! ผมเป็นผู้ช่วยของระบบ SmartStock WMS ยินดีช่วยเหลือครับ ลองพิมพ์ "ช่วยอะไรได้บ้าง" เพื่อดูสิ่งที่ผมช่วยได้เลยครับ';
+    } else if(/ขอบคุณ|thank/.test(q)){
+      reply = 'ยินดีครับ 😊 มีอะไรให้ช่วยเพิ่มเติมอีกไหมครับ';
+    } else {
+      reply = 'ขออภัยครับ ผมยังไม่เข้าใจคำถามนี้ ลองถามใหม่หรือพิมพ์ "ช่วยอะไรได้บ้าง" เพื่อดูรายการที่ผมช่วยได้ครับ';
+    }
+    setTimeout(()=> addMsg(reply, 'bot'), 280);
+  }
+
+  chatFab.addEventListener('click', ()=>{ chatPanel.classList.add('open'); chatFab.classList.add('hide'); chatInput.focus(); });
+  chatClose.addEventListener('click', ()=>{ chatPanel.classList.remove('open'); chatFab.classList.remove('hide'); });
+  chatForm.addEventListener('submit', (e)=>{
+    e.preventDefault();
+    const text = chatInput.value.trim();
+    if(!text) return;
+    addMsg(text, 'user');
+    chatInput.value = '';
+    respondTo(text);
+  });
+
+  function initChat(){
+    renderQuickReplies();
+    addMsg('สวัสดีครับ 👋 ผมคือผู้ช่วย SmartStock WMS', 'bot');
+    addMsg(CAPABILITIES_MSG, 'bot');
+  }
+
+  /* ---------------- Boot ---------------- */
+  startClock();
+  renderAll();
+  initChat();
+})();
+</script>
+</body>
+</html>
